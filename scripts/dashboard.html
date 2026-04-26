@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HVAC RL Control — Mission Control</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0f;--bg2:#0d1018;--bg3:#111520;
+  --card:#131720;--card2:#181d28;--card3:#1d2232;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--border3:rgba(255,255,255,0.18);
+  --text:#e8ecf5;--text2:#8892aa;--text3:#4a5168;--text4:#2e3447;
+  --green:#00e5a0;--green2:rgba(0,229,160,0.12);--green3:rgba(0,229,160,0.06);
+  --blue:#38bdf8;--blue2:rgba(56,189,248,0.12);
+  --orange:#fb923c;--orange2:rgba(251,146,60,0.12);
+  --red:#f87171;--red2:rgba(248,113,113,0.12);
+  --purple:#a78bfa;--purple2:rgba(167,139,250,0.12);
+  --yellow:#fbbf24;
+  --r:4px;--r2:8px;--r3:12px;--r4:16px;
+  --mono:'Space Mono',monospace;
+  --sans:'Syne',sans-serif;
+  --glow-green:0 0 20px rgba(0,229,160,0.15);
+  --glow-blue:0 0 20px rgba(56,189,248,0.15);
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* ── Scanline overlay ── */
+body::before{
+  content:'';position:fixed;top:0;left:0;right:0;bottom:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+  pointer-events:none;z-index:9999
+}
+
+/* ── Nav ── */
+.nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:52px;
+  background:rgba(8,10,15,0.92);
+  border-bottom:1px solid var(--border);
+  backdrop-filter:blur(12px);
+  position:sticky;top:0;z-index:100;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-icon{
+  width:32px;height:32px;border-radius:6px;
+  background:linear-gradient(135deg,var(--green),var(--blue));
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  box-shadow:var(--glow-green);
+}
+.nav-title{font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:0.04em}
+.nav-title span{color:var(--green)}
+.nav-tabs{display:flex;gap:2px}
+.nav-tab{
+  font-size:11px;padding:6px 14px;border-radius:var(--r2);cursor:pointer;
+  color:var(--text3);border:none;background:transparent;font-family:var(--mono);
+  transition:all 0.15s;letter-spacing:0.05em;text-transform:uppercase;
+}
+.nav-tab:hover{color:var(--text2);background:var(--card)}
+.nav-tab.active{color:var(--green);background:var(--green2)}
+.nav-status{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text3)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--text4)}
+.status-dot.on{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+
+/* ── Pages ── */
+.page{display:none;padding:24px 28px;max-width:1440px;margin:0 auto}
+.page.active{display:block}
+
+/* ── Section labels ── */
+.slabel{
+  font-size:10px;letter-spacing:0.15em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:12px;margin-top:28px;
+  display:flex;align-items:center;gap:10px;
+}
+.slabel::after{content:'';flex:1;height:1px;background:var(--border)}
+.slabel:first-child{margin-top:0}
+
+/* ── KPI cards ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.kpi{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r3);
+  padding:16px 18px;position:relative;overflow:hidden;transition:border-color 0.2s;
+}
+.kpi:hover{border-color:var(--border2)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--kpi-color,var(--green))}
+.kpi-label{font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text3);margin-bottom:8px}
+.kpi-value{font-family:var(--sans);font-size:26px;font-weight:800;color:var(--kpi-color,var(--text));line-height:1}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:6px}
+.kpi-delta{font-size:10px;margin-top:4px}
+.kpi-delta.up{color:var(--green)}
+.kpi-delta.down{color:var(--red)}
+
+/* ── Chart grid ── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:960px){.chart-grid{grid-template-columns:1fr}}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r4);padding:18px 20px}
+.chart-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.chart-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2)}
+.chart-sub{font-size:10px;color:var(--text3);margin-top:3px}
+.chart-badge{font-size:10px;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.chart-badge.ok{background:var(--green2);color:var(--green);border:1px solid rgba(0,229,160,0.25)}
+.chart-badge.warn{background:var(--orange2);color:var(--orange);border:1px solid rgba(251,146,60,0.25)}
+.chart-badge.err{background:var(--red2);color:var(--red);border:1px solid rgba(248,113,113,0.25)}
+.chart-badge.info{background:var(--blue2);color:var(--blue);border:1px solid rgba(56,189,248,0.25)}
+.cw{position:relative;width:100%;height:180px}
+.chart-leg{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.leg-line{width:16px;height:2px;flex-shrink:0}
+
+/* ── Simulation panel ── */
+.sim-layout{display:grid;grid-template-columns:1fr 340px;gap:16px}
+@media(max-width:1100px){.sim-layout{grid-template-columns:1fr}}
+.sim-canvas-wrap{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r4);
+  padding:18px 20px;position:relative;overflow:hidden;
+}
+.sim-canvas{width:100%;height:340px;border-radius:var(--r2)}
+.sim-controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.sim-btn{
+  font-size:11px;padding:7px 16px;border-radius:var(--r2);cursor:pointer;
+  font-family:var(--mono);transition:all 0.15s;border:1px solid var(--border2);
+  background:transparent;color:var(--text);letter-spacing:0.04em;
+}
+.sim-btn:hover{background:var(--card2)}
+.sim-btn.primary{background:var(--green);color:#000;border-color:var(--green);font-weight:700}
+.sim-btn.primary:hover{opacity:0.88}
+.sim-btn.danger{background:var(--red2);color:var(--red);border-color:rgba(248,113,113,0.3)}
+.sim-speed{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text3);margin-left:auto}
+.sim-speed input{width:80px;accent-color:var(--green)}
+
+.sim-info{display:flex;flex-direction:column;gap:10px}
+.sim-stat-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r3);padding:14px 16px;
+}
+.sim-stat-title{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);margin-bottom:10px}
+.sim-stat-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px}
+.sim-stat-row:last-child{border-bottom:none}
+.sim-stat-key{color:var(--text3)}
+.sim-stat-val{color:var(--text);font-weight:700}
+.sim-stat-val.green{color:var(--green)}
+.sim-stat-val.orange{color:var(--orange)}
+.sim-stat-val.red{color:var(--red)}
+.sim-stat-val.blue{color:var(--blue)}
+
+.gauge-wrap{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.gauge{background:var(--bg3);border-radius:var(--r2);padding:10px 12px;text-align:center}
+.gauge-label{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);margin-bottom:6px}
+.gauge-val{font-family:var(--sans);font-size:20px;font-weight:800}
+.gauge-bar-wrap{height:4px;background:var(--border);border-radius:99px;margin-top:6px;overflow:hidden}
+.gauge-bar{height:100%;border-radius:99px;transition:width 0.4s ease}
+
+/* Progress timeline */
+.timeline-wrap{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r3);
+  padding:14px 16px;margin-top:10px;
+}
+.timeline-title{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);margin-bottom:10px}
+.timeline{display:flex;height:32px;border-radius:var(--r);overflow:hidden;background:var(--bg3)}
+.timeline-seg{height:100%;transition:width 0.3s ease;position:relative}
+.timeline-seg:hover::after{
+  content:attr(data-tip);position:absolute;bottom:38px;left:50%;transform:translateX(-50%);
+  background:var(--card3);border:1px solid var(--border2);border-radius:var(--r);
+  font-size:10px;padding:4px 8px;white-space:nowrap;z-index:10;pointer-events:none;
+}
+.tl-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:9px;color:var(--text3)}
+
+/* ── Explainer page ── */
+.explainer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.explainer-grid{grid-template-columns:1fr}}
+.explain-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r4);padding:22px 24px}
+.explain-icon{font-size:28px;margin-bottom:12px}
+.explain-title{font-family:var(--sans);font-size:16px;font-weight:700;margin-bottom:8px}
+.explain-body{font-size:12px;color:var(--text2);line-height:2;font-family:var(--mono)}
+.explain-body b{color:var(--text)}
+.explain-body .hl{color:var(--green)}
+.explain-body .hlb{color:var(--blue)}
+.explain-body .hlo{color:var(--orange)}
+
+.formula-card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r3);padding:16px 18px;margin-top:14px}
+.formula-label{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);margin-bottom:10px}
+.formula{font-size:13px;line-height:2.2;color:var(--text)}
+.formula .neg{color:var(--red)}
+.formula .ev{color:var(--orange)}
+.formula .cv{color:var(--blue)}
+.formula .dim{font-size:11px;color:var(--text3)}
+.formula .hi{color:var(--green)}
+
+.pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pill{font-size:11px;padding:4px 12px;border-radius:99px;border:1px solid var(--border2);color:var(--text2);background:var(--bg3)}
+.pill b{color:var(--text)}
+.pill.green{border-color:rgba(0,229,160,0.3);color:var(--green);background:var(--green3)}
+
+/* Flow diagram */
+.flow{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin-top:14px}
+.flow-node{
+  display:flex;flex-direction:column;align-items:center;
+  background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);
+  padding:10px 14px;min-width:88px;font-size:10px;text-align:center;
+}
+.flow-icon{font-size:18px;margin-bottom:4px}
+.flow-label{font-weight:700;margin-bottom:2px;color:var(--text)}
+.flow-sub{color:var(--text3)}
+.flow-arrow{color:var(--text3);padding:0 6px;font-size:14px}
+
+/* Obs table */
+.obs-table{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px}
+.obs-row{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:var(--bg3);border-radius:var(--r);font-size:11px;
+  border:1px solid transparent;transition:border-color 0.15s;
+}
+.obs-row:hover{border-color:var(--border2)}
+.obs-num{color:var(--text3);min-width:20px;font-size:10px}
+.obs-name{flex:1;color:var(--text2)}
+.obs-unit{color:var(--text3);font-size:10px}
+
+/* ── Compare page ── */
+.compare-tabs{display:flex;gap:6px;margin-bottom:16px}
+.cmp-tab{
+  font-size:11px;padding:7px 18px;border-radius:var(--r2);cursor:pointer;
+  border:1px solid var(--border2);background:transparent;color:var(--text2);
+  font-family:var(--mono);transition:all 0.15s;
+}
+.cmp-tab.active{background:var(--blue2);color:var(--blue);border-color:rgba(56,189,248,0.3)}
+
+/* Comparison table */
+.cmp-table{width:100%;border-collapse:collapse;font-size:12px}
+.cmp-table th{
+  font-size:10px;text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--text3);padding:10px 14px;border-bottom:1px solid var(--border);
+  text-align:left;background:var(--card);
+}
+.cmp-table td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text2)}
+.cmp-table tr:hover td{background:var(--card2)}
+.cmp-table td.best{color:var(--green);font-weight:700}
+.cmp-table td.worst{color:var(--red)}
+
+/* ── Terminal ── */
+.terminal-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r4);padding:18px 20px}
+.term-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.prog-bar{height:3px;background:var(--bg3);border-radius:99px;margin-bottom:12px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:99px;width:0%;transition:width 0.35s ease}
+.term{
+  background:var(--bg2);border-radius:var(--r2);padding:14px 16px;
+  font-size:11px;line-height:2;min-height:120px;max-height:200px;
+  overflow-y:auto;border:1px solid var(--border);
+}
+.term::-webkit-scrollbar{width:4px}
+.term::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.tl{display:block}.tok{color:var(--green)}.tinfo{color:var(--blue)}
+.twarn{color:var(--orange)}.tdim{color:var(--text3)}.terr{color:var(--red)}
+
+/* ── Loading ── */
+.loading{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text3);padding:20px 0}
+.spin{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Info rows ── */
+.info-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r3);padding:16px 20px}
+.info-title{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);margin-bottom:12px;font-weight:700}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.info-row:last-child{border-bottom:none}
+.info-key{color:var(--text3)}
+.info-val{color:var(--text);font-weight:700}
+.info-val.green{color:var(--green)}
+.info-val.blue{color:var(--blue)}
+.info-val.orange{color:var(--orange)}
+
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.info-grid{grid-template-columns:1fr}}
+
+footer{
+  margin-top:40px;padding:16px 28px;
+  border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;
+  font-size:10px;color:var(--text3);
+  font-family:var(--mono);
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-icon">🏢</div>
+    <div>
+      <div class="nav-title">HVAC·RL <span>Control</span></div>
+    </div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('overview')">Overview</button>
+    <button class="nav-tab" onclick="showPage('simulation')">Simulation</button>
+    <button class="nav-tab" onclick="showPage('training')">Training</button>
+    <button class="nav-tab" onclick="showPage('explainer')">Explainer</button>
+  </div>
+  <div class="nav-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">connecting...</span>
+    <span style="color:var(--border2)">|</span>
+    <span id="last-refresh" style="color:var(--text4)">—</span>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- PAGE: OVERVIEW -->
+<!-- ══════════════════════════════════════════════ -->
+<div class="page active" id="page-overview">
+
+  <div class="slabel">Key performance indicators</div>
+  <div class="kpi-row" id="kpi-row">
+    <div class="loading"><div class="spin"></div>Loading data from server...</div>
+  </div>
+
+  <div class="slabel">Training &amp; evaluation</div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Training reward</div><div class="chart-sub">SAC agent — episode mean reward over training</div></div>
+        <span class="chart-badge info" id="badge-train">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-train"></canvas></div>
+      <div class="chart-leg">
+        <div class="leg-item"><div class="leg-line" style="background:var(--green)"></div>rolling mean</div>
+        <div class="leg-item"><div class="leg-line" style="background:var(--blue);opacity:0.5"></div>raw reward</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Eval checkpoint rewards</div><div class="chart-sub">Reward at each evaluation checkpoint</div></div>
+        <span class="chart-badge ok" id="badge-eval">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-eval"></canvas></div>
+      <div class="chart-leg">
+        <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>mean reward per checkpoint</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">HVAC energy demand</div><div class="chart-sub">Power consumption during evaluation year</div></div>
+        <span class="chart-badge info" id="badge-energy">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-energy"></canvas></div>
+      <div class="chart-leg">
+        <div class="leg-item"><div class="leg-dot" style="background:var(--blue)"></div>HVAC power (W)</div>
+        <div class="leg-item"><div class="leg-line" style="border-top:2px dashed var(--orange);background:none"></div>mean</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Thermal comfort violations</div><div class="chart-sub">Temperature deviation from comfort zone</div></div>
+        <span class="chart-badge" id="badge-comfort">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-comfort"></canvas></div>
+      <div class="chart-leg">
+        <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>violation °C</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>in comfort zone</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slabel">Model &amp; environment</div>
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="info-title">SAC agent config</div>
+      <div class="info-row"><span class="info-key">Algorithm</span><span class="info-val green">Soft Actor-Critic (SAC)</span></div>
+      <div class="info-row"><span class="info-key">Policy network</span><span class="info-val">MlpPolicy — feedforward NN</span></div>
+      <div class="info-row"><span class="info-key">Learning rate</span><span class="info-val">3 × 10⁻⁴</span></div>
+      <div class="info-row"><span class="info-key">Replay buffer</span><span class="info-val">25,000 transitions</span></div>
+      <div class="info-row"><span class="info-key">Batch size</span><span class="info-val">256</span></div>
+      <div class="info-row"><span class="info-key">Entropy coef</span><span class="info-val blue">auto (adaptive)</span></div>
+      <div class="info-row"><span class="info-key">Discount γ</span><span class="info-val">0.99</span></div>
+      <div class="info-row"><span class="info-key">Polyak τ</span><span class="info-val">0.005</span></div>
+      <div class="info-row"><span class="info-key">Checkpoints saved</span><span class="info-val green" id="ckpt-count">—</span></div>
+      <div class="info-row"><span class="info-key">Latest checkpoint</span><span class="info-val" id="ckpt-latest">—</span></div>
+    </div>
+    <div class="info-card">
+      <div class="info-title">Environment config</div>
+      <div class="info-row"><span class="info-key">Simulator</span><span class="info-val green">EnergyPlus 25.1.0 (US DOE)</span></div>
+      <div class="info-row"><span class="info-key">Interface</span><span class="info-val">Sinergym + Gymnasium</span></div>
+      <div class="info-row"><span class="info-key">Building</span><span class="info-val">5-zone office · Arizona</span></div>
+      <div class="info-row"><span class="info-key">Weather</span><span class="info-val">TMY3 · Davis-Monthan AFB</span></div>
+      <div class="info-row"><span class="info-key">Timestep</span><span class="info-val">15 minutes</span></div>
+      <div class="info-row"><span class="info-key">Episode length</span><span class="info-val">35,040 steps · 1 year</span></div>
+      <div class="info-row"><span class="info-key">Action space</span><span class="info-val blue">2 continuous setpoints</span></div>
+      <div class="info-row"><span class="info-key">Observations</span><span class="info-val">17 sensor values</span></div>
+      <div class="info-row"><span class="info-key">Stochastic weather</span><span class="info-val green">enabled</span></div>
+      <div class="info-row"><span class="info-key">Energy weight ω</span><span class="info-val">0.5 (balanced)</span></div>
+    </div>
+  </div>
+
+  <div class="slabel">Terminal log</div>
+  <div class="terminal-wrap">
+    <div class="term-controls">
+      <button class="sim-btn primary" onclick="refreshAll()">↻ Refresh data</button>
+      <button class="sim-btn" onclick="clearTerm()">clear log</button>
+      <span style="font-size:10px;color:var(--text3);margin-left:auto" id="refresh-time"></span>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" id="prog"></div></div>
+    <div class="term" id="term"><span class="tl tdim">[system] Connecting to server at http://localhost:5000 ...</span></div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- PAGE: SIMULATION -->
+<!-- ══════════════════════════════════════════════ -->
+<div class="page" id="page-simulation">
+
+  <div class="slabel">Live agent simulation</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.8">
+    Watch the SAC agent control a virtual 5-zone office building in real time.
+    The simulation replays evaluation data — showing how the agent reacts to changing outdoor conditions, occupancy, and solar load across a full year.
+  </div>
+
+  <div class="sim-layout">
+
+    <!-- Canvas -->
+    <div class="sim-canvas-wrap">
+      <div class="sim-controls">
+        <button class="sim-btn primary" id="btn-play" onclick="simPlay()">▶ Play</button>
+        <button class="sim-btn" onclick="simPause()">⏸ Pause</button>
+        <button class="sim-btn" onclick="simReset()">⏮ Reset</button>
+        <div class="sim-speed">
+          <span>Speed</span>
+          <input type="range" id="sim-speed" min="1" max="20" value="5">
+          <span id="speed-label">5×</span>
+        </div>
+      </div>
+      <canvas class="sim-canvas" id="sim-canvas" width="700" height="340"></canvas>
+      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--text3)">Step: <b id="sim-step-label" style="color:var(--text)">0 / 35,040</b></span>
+        <span style="font-size:10px;color:var(--text3)">Month: <b id="sim-month-label" style="color:var(--blue)">Jan</b></span>
+        <span style="font-size:10px;color:var(--text3)">Hour: <b id="sim-hour-label" style="color:var(--text)">00:00</b></span>
+        <span style="font-size:10px;color:var(--text3)">Outdoor: <b id="sim-outdoor-label" style="color:var(--orange)">—°C</b></span>
+      </div>
+      <!-- Progress timeline -->
+      <div class="timeline-wrap">
+        <div class="timeline-title">Year progress</div>
+        <div class="timeline" id="sim-timeline"></div>
+        <div class="tl-labels"><span>Jan</span><span>Mar</span><span>Jun</span><span>Sep</span><span>Dec</span></div>
+      </div>
+    </div>
+
+    <!-- Stats sidebar -->
+    <div class="sim-info">
+
+      <div class="sim-stat-card">
+        <div class="sim-stat-title">Current timestep</div>
+        <div class="gauge-wrap">
+          <div class="gauge">
+            <div class="gauge-label">Indoor °C</div>
+            <div class="gauge-val" id="g-indoor" style="color:var(--blue)">—</div>
+            <div class="gauge-bar-wrap"><div class="gauge-bar" id="gb-indoor" style="background:var(--blue);width:50%"></div></div>
+          </div>
+          <div class="gauge">
+            <div class="gauge-label">Outdoor °C</div>
+            <div class="gauge-val" id="g-outdoor" style="color:var(--orange)">—</div>
+            <div class="gauge-bar-wrap"><div class="gauge-bar" id="gb-outdoor" style="background:var(--orange);width:50%"></div></div>
+          </div>
+          <div class="gauge">
+            <div class="gauge-label">Heat setpt</div>
+            <div class="gauge-val" id="g-heat" style="color:var(--red)">—</div>
+            <div class="gauge-bar-wrap"><div class="gauge-bar" id="gb-heat" style="background:var(--red);width:40%"></div></div>
+          </div>
+          <div class="gauge">
+            <div class="gauge-label">Cool setpt</div>
+            <div class="gauge-val" id="g-cool" style="color:var(--green)">—</div>
+            <div class="gauge-bar-wrap"><div class="gauge-bar" id="gb-cool" style="background:var(--green);width:60%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sim-stat-card">
+        <div class="sim-stat-title">Agent performance</div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Step reward</span><span class="sim-stat-val green" id="stat-reward">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Cumul. reward</span><span class="sim-stat-val" id="stat-cumreward">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">HVAC power</span><span class="sim-stat-val blue" id="stat-power">— W</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Temp violation</span><span class="sim-stat-val" id="stat-viol">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Comfort status</span><span class="sim-stat-val" id="stat-comfort">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">CO₂ emissions</span><span class="sim-stat-val" id="stat-co2">—</span></div>
+      </div>
+
+      <div class="sim-stat-card">
+        <div class="sim-stat-title">Season summary</div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Current season</span><span class="sim-stat-val blue" id="stat-season">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Solar radiation</span><span class="sim-stat-val orange" id="stat-solar">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Wind speed</span><span class="sim-stat-val" id="stat-wind">—</span></div>
+        <div class="sim-stat-row"><span class="sim-stat-key">Occupancy</span><span class="sim-stat-val" id="stat-occ">—</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Mini reward chart during simulation -->
+  <div class="slabel" style="margin-top:24px">Live reward trace</div>
+  <div class="chart-card">
+    <div class="chart-head">
+      <div><div class="chart-title">Step reward — simulation playback</div><div class="chart-sub">Last 200 timesteps</div></div>
+      <span class="chart-badge ok" id="badge-live">playing</span>
+    </div>
+    <div class="cw"><canvas id="chart-live"></canvas></div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- PAGE: TRAINING -->
+<!-- ══════════════════════════════════════════════ -->
+<div class="page" id="page-training">
+
+  <div class="slabel">Training deep-dive</div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Energy penalty term</div><div class="chart-sub">λ_energy × ω × HVAC_power over episodes</div></div>
+        <span class="chart-badge warn" id="badge-energy2">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-energy2"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Comfort penalty term</div><div class="chart-sub">λ_temp × (1-ω) × temp_violation over episodes</div></div>
+        <span class="chart-badge warn" id="badge-comfort2">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-comfort2"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Mean power demand per episode</div><div class="chart-sub">Average HVAC electricity demand (W)</div></div>
+        <span class="chart-badge info" id="badge-power">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-power"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div><div class="chart-title">Comfort violation time %</div><div class="chart-sub">% of timesteps outside comfort zone per episode</div></div>
+        <span class="chart-badge" id="badge-viol2">loading...</span>
+      </div>
+      <div class="cw"><canvas id="chart-viol2"></canvas></div>
+    </div>
+  </div>
+
+  <div class="slabel">Episode statistics table</div>
+  <div class="info-card" style="overflow-x:auto">
+    <table class="cmp-table" id="episode-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Mean Reward</th><th>Energy Penalty</th>
+          <th>Comfort Penalty</th><th>Mean Power (W)</th>
+          <th>Violation %</th><th>Steps</th>
+        </tr>
+      </thead>
+      <tbody id="episode-tbody">
+        <tr><td colspan="7" style="color:var(--text3);padding:20px">Loading episode data...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- PAGE: EXPLAINER -->
+<!-- ══════════════════════════════════════════════ -->
+<div class="page" id="page-explainer">
+
+  <div class="slabel">What is this project?</div>
+  <div class="explainer-grid">
+
+    <div class="explain-card">
+      <div class="explain-icon">🤖</div>
+      <div class="explain-title">Reinforcement Learning for HVAC</div>
+      <div class="explain-body">
+        This project trains an AI agent to control the <b>heating and cooling system</b> of an office building.
+        Instead of using fixed schedules, the agent <span class="hl">learns</span> the best setpoints by trying millions of scenarios
+        and getting rewarded for saving energy while keeping occupants comfortable.<br><br>
+        Think of it like teaching a thermostat to think — it reads <b>17 sensor values</b> every 15 minutes
+        and decides the optimal <span class="hlb">heating</span> and <span class="hlo">cooling setpoints</span>.
+      </div>
+    </div>
+
+    <div class="explain-card">
+      <div class="explain-icon">🏢</div>
+      <div class="explain-title">The Building &amp; Simulation</div>
+      <div class="explain-body">
+        The agent controls a <b>5-zone office building</b> in Arizona (hot desert climate).
+        The simulation uses <span class="hl">EnergyPlus</span> — the US Department of Energy's building physics engine
+        used by real engineers worldwide.<br><br>
+        Each training <b>episode = 1 full year</b> of simulation at <b>15-minute intervals</b>,
+        totalling <span class="hlb">35,040 timesteps</span>. Weather is randomised slightly each episode
+        to prevent overfitting to a single year.
+      </div>
+    </div>
+
+    <div class="explain-card">
+      <div class="explain-icon">🧠</div>
+      <div class="explain-title">The SAC Algorithm</div>
+      <div class="explain-body">
+        <b>Soft Actor-Critic (SAC)</b> is an off-policy RL algorithm designed for continuous action spaces —
+        perfect for thermostat setpoints which aren't discrete buttons but a <span class="hl">continuous range</span> of temperatures.<br><br>
+        SAC maintains an <b>actor</b> (picks actions) and a <b>critic</b> (evaluates them).
+        The "soft" part adds <span class="hlb">entropy regularisation</span> — encouraging exploration by rewarding the agent
+        for being unpredictable, which prevents getting stuck in bad habits early in training.
+      </div>
+    </div>
+
+    <div class="explain-card">
+      <div class="explain-icon">🎯</div>
+      <div class="explain-title">Why does reward go negative?</div>
+      <div class="explain-body">
+        The reward is <span class="hlo">always negative</span> by design — the agent is penalised for both
+        energy use and temperature discomfort. <b>Closer to zero = better.</b><br><br>
+        A mean reward of <span class="hl">−0.22</span> means the agent is efficiently balancing both goals.
+        A random agent gets around <span class="hlo">−0.50 or worse</span>.
+        The goal is to push the reward as close to <b>0</b> as possible.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="slabel">Reward function</div>
+  <div class="explain-card">
+    <div class="explain-title">How the agent is scored every 15 minutes</div>
+    <div class="formula-card">
+      <div class="formula-label">LinearReward formula</div>
+      <div class="formula">
+        reward<sub>t</sub> = <span class="neg">−(</span>
+        <span class="ev">λ_energy × ω × HVAC_power_t</span>
+        <span> + </span>
+        <span class="cv">λ_temp × (1−ω) × |T_t − T_comfort|</span>
+        <span class="neg">)</span><br>
+        <span class="dim">// negative always · optimal = 0 · agent must minimise both terms simultaneously</span>
+      </div>
+    </div>
+    <div class="pill-row">
+      <div class="pill">ω (energy weight) = <b>0.5</b></div>
+      <div class="pill">λ_energy = <b>0.0001</b></div>
+      <div class="pill">λ_temp = <b>1.0</b></div>
+      <div class="pill">Winter comfort = <b>20–23.5 °C</b></div>
+      <div class="pill">Summer comfort = <b>23–26 °C</b></div>
+      <div class="pill green">ω=0 → comfort only · ω=1 → energy only</div>
+    </div>
+  </div>
+
+  <div class="slabel">How learning works — step by step</div>
+  <div class="explain-card">
+    <div class="explain-title">The training loop — every 15 minutes</div>
+    <div class="flow">
+      <div class="flow-node"><div class="flow-icon">🏢</div><div class="flow-label">EnergyPlus</div><div class="flow-sub">simulates physics</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-icon">📡</div><div class="flow-label">17 sensors</div><div class="flow-sub">observation s_t</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-icon">🧠</div><div class="flow-label">SAC actor</div><div class="flow-sub">policy π(s_t)</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-icon">🌡️</div><div class="flow-label">2 setpoints</div><div class="flow-sub">action a_t</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-icon">🏆</div><div class="flow-label">reward r_t</div><div class="flow-sub">energy+comfort</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-icon">💾</div><div class="flow-label">replay buffer</div><div class="flow-sub">(s,a,r,s′)</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-icon">📈</div><div class="flow-label">gradient update</div><div class="flow-sub">batch=256</div></div>
+    </div>
+  </div>
+
+  <div class="slabel">Observation space — what the agent sees</div>
+  <div class="explain-card">
+    <div class="explain-title">17 normalised sensor inputs — received every 15 minutes</div>
+    <div class="obs-table">
+      <div class="obs-row"><span class="obs-num">01</span><span class="obs-name">Month (cos)</span><span class="obs-unit">cyclic</span></div>
+      <div class="obs-row"><span class="obs-num">02</span><span class="obs-name">Month (sin)</span><span class="obs-unit">cyclic</span></div>
+      <div class="obs-row"><span class="obs-num">03</span><span class="obs-name">Day (cos)</span><span class="obs-unit">cyclic</span></div>
+      <div class="obs-row"><span class="obs-num">04</span><span class="obs-name">Day (sin)</span><span class="obs-unit">cyclic</span></div>
+      <div class="obs-row"><span class="obs-num">05</span><span class="obs-name">Hour (cos)</span><span class="obs-unit">cyclic</span></div>
+      <div class="obs-row"><span class="obs-num">06</span><span class="obs-name">Hour (sin)</span><span class="obs-unit">cyclic</span></div>
+      <div class="obs-row"><span class="obs-num">07</span><span class="obs-name">Outdoor temperature</span><span class="obs-unit">°C</span></div>
+      <div class="obs-row"><span class="obs-num">08</span><span class="obs-name">Outdoor humidity</span><span class="obs-unit">%</span></div>
+      <div class="obs-row"><span class="obs-num">09</span><span class="obs-name">Wind speed</span><span class="obs-unit">m/s</span></div>
+      <div class="obs-row"><span class="obs-num">10</span><span class="obs-name">Wind direction</span><span class="obs-unit">deg</span></div>
+      <div class="obs-row"><span class="obs-num">11</span><span class="obs-name">Diffuse solar radiation</span><span class="obs-unit">W/m²</span></div>
+      <div class="obs-row"><span class="obs-num">12</span><span class="obs-name">Direct solar radiation</span><span class="obs-unit">W/m²</span></div>
+      <div class="obs-row"><span class="obs-num">13</span><span class="obs-name">Indoor air temperature</span><span class="obs-unit">°C</span></div>
+      <div class="obs-row"><span class="obs-num">14</span><span class="obs-name">Indoor humidity</span><span class="obs-unit">%</span></div>
+      <div class="obs-row"><span class="obs-num">15</span><span class="obs-name">People occupant count</span><span class="obs-unit">persons</span></div>
+      <div class="obs-row"><span class="obs-num">16</span><span class="obs-name">HVAC electricity demand</span><span class="obs-unit">W</span></div>
+      <div class="obs-row"><span class="obs-num">17</span><span class="obs-name">Total HVAC electricity</span><span class="obs-unit">J</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+      <div style="flex:1;background:var(--bg3);border-radius:var(--r2);padding:12px 16px;border:1px solid rgba(248,113,113,0.25)">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Action 1</div>
+        <div style="font-size:13px;font-weight:700">Heating setpoint</div>
+        <div style="font-size:11px;color:var(--red);margin-top:3px">12°C → 23.25°C</div>
+      </div>
+      <div style="flex:1;background:var(--bg3);border-radius:var(--r2);padding:12px 16px;border:1px solid rgba(0,229,160,0.25)">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Action 2</div>
+        <div style="font-size:13px;font-weight:700">Cooling setpoint</div>
+        <div style="font-size:11px;color:var(--green);margin-top:3px">23.25°C → 30°C</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>HVAC RL Control · SAC + Sinergym + EnergyPlus · Symbiosis Institute of Technology</span>
+  <span id="footer-status">Loading...</span>
+</footer>
+
+<script>
+const API = 'http://localhost:5000/api';
+const GC = 'rgba(255,255,255,0.05)';
+const TC = 'rgba(255,255,255,0.3)';
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+let charts = {};
+let simData = null;
+let simIdx = 0;
+let simTimer = null;
+let simRunning = false;
+let liveRewards = [];
+
+// ── Page navigation ──────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'simulation' && simData) initSimCanvas();
+}
+
+// ── Chart factory ────────────────────────────────
+const baseOpts = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false },
+    tooltip: { titleFont: { size: 11, family: 'monospace' }, bodyFont: { size: 11, family: 'monospace' },
+      backgroundColor: '#1d2232', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 }},
+  scales: {
+    x: { grid: { color: GC }, ticks: { color: TC, font: { size: 10, family: 'monospace' }, maxTicksLimit: 5 }},
+    y: { grid: { color: GC }, ticks: { color: TC, font: { size: 10, family: 'monospace' }, maxTicksLimit: 5 }}
+  },
+  elements: { point: { radius: 0 } },
+  animation: { duration: 500 }
+};
+
+function mkChart(id, type, data, extraOpts={}) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, { type, data, options: { ...baseOpts, ...extraOpts }});
+}
+
+// ── Terminal ─────────────────────────────────────
+function log(msg, cls) {
+  const el = document.getElementById('term');
+  const line = document.createElement('span');
+  line.className = 'tl' + (cls ? ' ' + cls : '');
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function setP(v) { document.getElementById('prog').style.width = v + '%'; }
+function clearTerm() { document.getElementById('term').innerHTML = ''; setP(0); }
+
+function setStatus(on, txt) {
+  document.getElementById('status-dot').className = 'status-dot' + (on ? ' on' : '');
+  document.getElementById('status-text').textContent = txt;
+}
+function setBadge(id, txt, type='ok') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'chart-badge ' + type;
+}
+
+async function fetchJSON(path) {
+  const res = await fetch(API + path);
+  return res.json();
+}
+
+// ── Load model info ───────────────────────────────
+async function loadModelInfo() {
+  try {
+    const d = await fetchJSON('/model_info');
+    document.getElementById('ckpt-count').textContent = d.checkpoints;
+    document.getElementById('ckpt-latest').textContent = d.latest_step ? d.latest_step.toLocaleString() + ' steps' : 'none';
+    const modelOk = d.final_exists || d.best_exists;
+    setStatus(modelOk, modelOk ? 'model ready' : 'no model');
+    log(`[model] checkpoints:${d.checkpoints} latest:${d.latest_step?.toLocaleString()} best:${d.best_exists} final:${d.final_exists}`, 'tok');
+    setP(20);
+  } catch(e) { log('[model] ' + e.message, 'terr'); }
+}
+
+// ── Load training chart ───────────────────────────
+async function loadTraining() {
+  try {
+    const d = await fetchJSON('/training');
+    if (d.error) { log('[training] ' + d.error, 'twarn'); setBadge('badge-train','no data','err'); return; }
+    mkChart('chart-train', 'line', {
+      labels: d.labels,
+      datasets: [
+        { data: d.raw, borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, tension: 0.3, fill: false },
+        { data: d.rolling, borderColor: '#00e5a0', borderWidth: 2.5, tension: 0.4, fill: false }
+      ]
+    });
+    setBadge('badge-train', d.total_steps.toLocaleString() + ' steps', 'info');
+    log(`[training] ${d.total_steps.toLocaleString()} steps | last: ${d.raw[d.raw.length-1]}`, 'tok');
+    setP(40);
+  } catch(e) { log('[training] ' + e.message, 'terr'); setBadge('badge-train','error','err'); }
+}
+
+// ── Load eval checkpoints ─────────────────────────
+async function loadEvalCheckpoints() {
+  try {
+    const d = await fetchJSON('/eval_checkpoints');
+    if (d.error) { log('[eval] ' + d.error, 'twarn'); setBadge('badge-eval','no data','err'); return; }
+    mkChart('chart-eval', 'line', {
+      labels: d.labels,
+      datasets: [{
+        data: d.rewards,
+        borderColor: '#00e5a0', backgroundColor: 'rgba(0,229,160,0.07)',
+        borderWidth: 2.5, tension: 0.3, fill: true,
+        pointBackgroundColor: '#00e5a0', pointRadius: 5, pointHoverRadius: 7
+      }]
+    });
+    setBadge('badge-eval', d.labels.length + ' evals', 'ok');
+    log(`[eval] ${d.labels.length} checkpoints | best: ${Math.max(...d.rewards).toFixed(2)}`, 'tok');
+    setP(60);
+  } catch(e) { log('[eval] ' + e.message, 'terr'); setBadge('badge-eval','error','err'); }
+}
+
+// ── Load eval year ────────────────────────────────
+async function loadEvalYear() {
+  try {
+    const d = await fetchJSON('/eval_year');
+    if (d.error) { log('[eval_year] ' + d.error, 'twarn'); return; }
+
+    if (d.energy_values) {
+      const eMean = d.energy_mean;
+      mkChart('chart-energy', 'line', {
+        labels: d.energy_labels,
+        datasets: [
+          { data: d.energy_values, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.06)', borderWidth: 1.5, tension: 0.4, fill: true },
+          { data: d.energy_labels.map(() => eMean), borderColor: '#fb923c', borderWidth: 1.5, borderDash: [5,4], fill: false }
+        ]
+      });
+      setBadge('badge-energy', 'mean: ' + Math.round(eMean).toLocaleString() + ' W', 'info');
+    }
+
+    if (d.viol_values) {
+      mkChart('chart-comfort', 'bar', {
+        labels: d.viol_labels,
+        datasets: [{
+          data: d.viol_values,
+          backgroundColor: d.viol_values.map(v => v === 0 ? 'rgba(0,229,160,0.4)' : 'rgba(248,113,113,0.7)'),
+          borderWidth: 0, borderRadius: 1
+        }]
+      });
+      setBadge('badge-comfort', d.comfort_pct + '% comfortable', d.comfort_pct > 70 ? 'ok' : 'warn');
+      log(`[eval_year] comfort: ${d.comfort_pct}% | mean violation: ${d.viol_mean}°C`, 'tok');
+    }
+
+    if (d.reward_mean !== undefined) updateKPIs(d);
+    setP(80);
+  } catch(e) { log('[eval_year] ' + e.message, 'terr'); }
+}
+
+// ── Load training deep-dive ───────────────────────
+async function loadTrainingDeepDive() {
+  try {
+    const d = await fetchJSON('/training_detail');
+    if (d.error || !d.episodes) { log('[detail] ' + (d.error||'no data'), 'twarn'); return; }
+
+    const eps = d.episodes;
+    const labels = eps.map(e => 'ep'+e.episode_num);
+
+    mkChart('chart-energy2', 'line', {
+      labels,
+      datasets: [{ data: eps.map(e => e.mean_energy_penalty), borderColor: '#fb923c', borderWidth: 2, tension: 0.3, fill: false }]
+    });
+    setBadge('badge-energy2', 'energy penalty', 'warn');
+
+    mkChart('chart-comfort2', 'line', {
+      labels,
+      datasets: [{ data: eps.map(e => e.mean_comfort_penalty), borderColor: '#f87171', borderWidth: 2, tension: 0.3, fill: false }]
+    });
+    setBadge('badge-comfort2', 'comfort penalty', 'warn');
+
+    mkChart('chart-power', 'bar', {
+      labels,
+      datasets: [{ data: eps.map(e => e.mean_power_demand), backgroundColor: 'rgba(56,189,248,0.5)', borderWidth: 0, borderRadius: 2 }]
+    });
+    setBadge('badge-power', 'power demand', 'info');
+
+    mkChart('chart-viol2', 'bar', {
+      labels,
+      datasets: [{ data: eps.map(e => e.comfort_violation_pct), backgroundColor: eps.map(e => e.comfort_violation_pct < 20 ? 'rgba(0,229,160,0.5)' : 'rgba(248,113,113,0.6)'), borderWidth: 0, borderRadius: 2 }]
+    });
+    setBadge('badge-viol2', 'violation %', 'warn');
+
+    // Fill table
+    const tbody = document.getElementById('episode-tbody');
+    tbody.innerHTML = eps.map(e => `
+      <tr>
+        <td>${e.episode_num}</td>
+        <td class="${e.mean_reward > -0.25 ? 'best' : ''}">${e.mean_reward?.toFixed(4)}</td>
+        <td>${e.mean_energy_penalty?.toFixed(4)}</td>
+        <td>${e.mean_comfort_penalty?.toFixed(4)}</td>
+        <td>${Math.round(e.mean_power_demand).toLocaleString()}</td>
+        <td class="${e.comfort_violation_pct < 10 ? 'best' : e.comfort_violation_pct > 40 ? 'worst' : ''}">${e.comfort_violation_pct?.toFixed(1)}%</td>
+        <td>${e.length_timesteps?.toLocaleString()}</td>
+      </tr>`).join('');
+
+    log(`[detail] loaded ${eps.length} episodes`, 'tok');
+  } catch(e) { log('[detail] ' + e.message, 'terr'); }
+}
+
+// ── Update KPI cards ──────────────────────────────
+function updateKPIs(d) {
+  const kpiRow = document.getElementById('kpi-row');
+  kpiRow.innerHTML = `
+    <div class="kpi" style="--kpi-color:var(--blue)">
+      <div class="kpi-label">Total timesteps</div>
+      <div class="kpi-value" style="color:var(--blue)">25k</div>
+      <div class="kpi-sub">training steps completed</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--green)">
+      <div class="kpi-label">Mean reward / step</div>
+      <div class="kpi-value" style="color:var(--green)">${d.reward_mean ?? '—'}</div>
+      <div class="kpi-sub">higher (less negative) = better</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--text)">
+      <div class="kpi-label">Total episode reward</div>
+      <div class="kpi-value">${d.reward_total ? d.reward_total.toLocaleString() : '—'}</div>
+      <div class="kpi-sub">sum over eval year</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--blue)">
+      <div class="kpi-label">Mean HVAC power</div>
+      <div class="kpi-value" style="color:var(--blue)">${d.energy_mean ? Math.round(d.energy_mean/1000)+'kW' : '—'}</div>
+      <div class="kpi-sub">avg electricity demand</div>
+    </div>
+    <div class="kpi" style="--kpi-color:${(d.comfort_pct||0)>70?'var(--green)':'var(--orange)'}">
+      <div class="kpi-label">In comfort zone</div>
+      <div class="kpi-value" style="color:${(d.comfort_pct||0)>70?'var(--green)':'var(--orange)'}">${d.comfort_pct ? d.comfort_pct+'%' : '—'}</div>
+      <div class="kpi-sub">timesteps within setpoints</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--orange)">
+      <div class="kpi-label">Mean temp violation</div>
+      <div class="kpi-value" style="color:var(--orange)">${d.viol_mean ? d.viol_mean+'°C' : '—'}</div>
+      <div class="kpi-sub">avg deviation outside range</div>
+    </div>
+  `;
+  document.getElementById('footer-status').textContent =
+    `reward: ${d.reward_mean} | power: ${d.energy_mean ? Math.round(d.energy_mean).toLocaleString() : '—'} W | comfort: ${d.comfort_pct}%`;
+}
+
+// ══════════════════════════════════════════════════
+// SIMULATION ENGINE
+// ══════════════════════════════════════════════════
+async function loadSimData() {
+  try {
+    const d = await fetchJSON('/sim_data');
+    if (d.error) { log('[sim] ' + d.error, 'twarn'); return; }
+    simData = d;
+    log(`[sim] loaded ${d.steps} timesteps for simulation`, 'tok');
+    initSimCanvas();
+    initLiveChart();
+  } catch(e) { log('[sim] ' + e.message, 'terr'); }
+}
+
+function initLiveChart() {
+  liveRewards = new Array(200).fill(null);
+  mkChart('chart-live', 'line', {
+    labels: Array.from({length:200}, (_,i) => i),
+    datasets: [{
+      data: liveRewards,
+      borderColor: '#00e5a0', backgroundColor: 'rgba(0,229,160,0.05)',
+      borderWidth: 1.5, tension: 0.3, fill: true,
+      spanGaps: false
+    }]
+  }, {
+    scales: {
+      x: { display: false },
+      y: { grid: { color: GC }, ticks: { color: TC, font: { size:10, family:'monospace' }, maxTicksLimit: 4 } }
+    }
+  });
+}
+
+function simPlay() {
+  if (!simData) { log('[sim] No simulation data. Server must return /api/sim_data', 'twarn'); return; }
+  if (simRunning) return;
+  simRunning = true;
+  document.getElementById('badge-live').textContent = 'playing';
+  document.getElementById('badge-live').className = 'chart-badge ok';
+  const speed = parseInt(document.getElementById('sim-speed').value);
+  const interval = Math.max(16, Math.round(100 / speed));
+  simTimer = setInterval(() => simStep(speed), interval);
+}
+
+function simPause() {
+  simRunning = false;
+  if (simTimer) clearInterval(simTimer);
+  document.getElementById('badge-live').textContent = 'paused';
+  document.getElementById('badge-live').className = 'chart-badge warn';
+}
+
+function simReset() {
+  simPause();
+  simIdx = 0;
+  liveRewards = new Array(200).fill(null);
+  if (charts['chart-live']) {
+    charts['chart-live'].data.datasets[0].data = liveRewards;
+    charts['chart-live'].update('none');
+  }
+  drawSimCanvas(0);
+}
+
+document.getElementById('sim-speed').addEventListener('input', function() {
+  document.getElementById('speed-label').textContent = this.value + '×';
+  if (simRunning) { simPause(); simPlay(); }
+});
+
+function simStep(steps) {
+  if (!simData || simIdx >= simData.steps) { simPause(); return; }
+  for (let i = 0; i < steps && simIdx < simData.steps; i++, simIdx++) {
+    const r = simData.rewards[simIdx];
+    liveRewards.push(r);
+    if (liveRewards.length > 200) liveRewards.shift();
+  }
+  updateSimStats();
+  drawSimCanvas(simIdx);
+  if (charts['chart-live']) {
+    charts['chart-live'].data.datasets[0].data = [...liveRewards];
+    charts['chart-live'].update('none');
+  }
+}
+
+function updateSimStats() {
+  if (!simData || simIdx === 0) return;
+  const i = simIdx - 1;
+  const obs = simData.observations[i] || {};
+  const reward = simData.rewards[i] || 0;
+
+  const indoor = obs.air_temperature;
+  const outdoor = obs.outdoor_temperature;
+  const heat = obs.heating_setpoint;
+  const cool = obs.cooling_setpoint;
+  const power = obs.HVAC_electricity_demand_rate;
+  const co2 = obs.co2_emission;
+  const solar = obs.direct_solar_radiation;
+  const wind = obs.wind_speed;
+  const occ = obs.people_occupant;
+
+  const month = Math.round(((obs.month_cos !== undefined) ? Math.acos(obs.month_cos)/(2*Math.PI)*12 : (i/simData.steps)*12));
+  const hour = Math.round(((obs.hour_cos !== undefined) ? Math.acos(obs.hour_cos)/(2*Math.PI)*24 : (i%96)/4));
+
+  const seasons = ['Winter','Winter','Spring','Spring','Spring','Summer','Summer','Summer','Fall','Fall','Fall','Winter'];
+  const season = seasons[Math.min(11, Math.max(0, Math.floor(month)))] || '—';
+
+  // Is in comfort zone?
+  const isWinter = month < 3 || month > 11;
+  const comfortMin = isWinter ? 20 : 23;
+  const comfortMax = isWinter ? 23.5 : 26;
+  const inComfort = indoor !== undefined && indoor >= comfortMin && indoor <= comfortMax;
+
+  // Update labels
+  document.getElementById('sim-step-label').textContent = `${simIdx.toLocaleString()} / 35,040`;
+  document.getElementById('sim-month-label').textContent = MONTHS[Math.min(11, Math.max(0, Math.floor(month)))] || '—';
+  document.getElementById('sim-hour-label').textContent = String(hour).padStart(2,'0') + ':00';
+  document.getElementById('sim-outdoor-label').textContent = outdoor !== undefined ? outdoor.toFixed(1)+'°C' : '—';
+
+  // Gauges
+  setGauge('g-indoor', 'gb-indoor', indoor, 10, 45, '#38bdf8');
+  setGauge('g-outdoor', 'gb-outdoor', outdoor, -5, 50, '#fb923c');
+  setGauge('g-heat', 'gb-heat', heat, 10, 25, '#f87171');
+  setGauge('g-cool', 'gb-cool', cool, 20, 35, '#00e5a0');
+
+  // Stats
+  const cumulReward = simData.rewards.slice(0, simIdx).reduce((a,b) => a+(b||0), 0);
+  document.getElementById('stat-reward').textContent = reward.toFixed(4);
+  document.getElementById('stat-reward').className = 'sim-stat-val ' + (reward > -0.2 ? 'green' : reward > -0.4 ? 'orange' : 'red');
+  document.getElementById('stat-cumreward').textContent = cumulReward.toFixed(1);
+  document.getElementById('stat-power').textContent = power !== undefined ? Math.round(power).toLocaleString() + ' W' : '—';
+  document.getElementById('stat-power').className = 'sim-stat-val blue';
+
+  const viol = indoor !== undefined ? Math.max(0, comfortMin - indoor) + Math.max(0, indoor - comfortMax) : 0;
+  document.getElementById('stat-viol').textContent = viol > 0 ? viol.toFixed(2)+'°C' : 'none';
+  document.getElementById('stat-viol').className = 'sim-stat-val ' + (viol === 0 ? 'green' : 'red');
+  document.getElementById('stat-comfort').textContent = inComfort ? '✓ comfortable' : '✗ violation';
+  document.getElementById('stat-comfort').className = 'sim-stat-val ' + (inComfort ? 'green' : 'red');
+  document.getElementById('stat-co2').textContent = co2 !== undefined ? co2.toFixed(2)+' kg' : '—';
+  document.getElementById('stat-season').textContent = season;
+  document.getElementById('stat-solar').textContent = solar !== undefined ? Math.round(solar)+' W/m²' : '—';
+  document.getElementById('stat-wind').textContent = wind !== undefined ? wind.toFixed(1)+' m/s' : '—';
+  document.getElementById('stat-occ').textContent = occ !== undefined ? Math.round(occ)+' persons' : '—';
+
+  // Timeline
+  updateTimeline(simIdx / simData.steps);
+}
+
+function setGauge(valId, barId, val, min, max, color) {
+  if (val === undefined) return;
+  document.getElementById(valId).textContent = val.toFixed(1);
+  const pct = Math.max(0, Math.min(100, (val - min) / (max - min) * 100));
+  const bar = document.getElementById(barId);
+  bar.style.width = pct + '%';
+  bar.style.background = color;
+}
+
+function updateTimeline(progress) {
+  const tl = document.getElementById('sim-timeline');
+  const pct = Math.round(progress * 100);
+  tl.innerHTML = `
+    <div class="timeline-seg" style="width:${pct}%;background:linear-gradient(90deg,#38bdf8,#00e5a0)" data-tip="${pct}% complete"></div>
+    <div class="timeline-seg" style="width:${100-pct}%;background:var(--bg3)"></div>
+  `;
+}
+
+function initSimCanvas() {
+  drawSimCanvas(0);
+}
+
+function drawSimCanvas(step) {
+  const canvas = document.getElementById('sim-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#0d1018');
+  grad.addColorStop(1, '#111520');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Get current data
+  const i = Math.max(0, step - 1);
+  const obs = (simData && simData.observations && simData.observations[i]) ? simData.observations[i] : {};
+  const indoor = obs.air_temperature || 22;
+  const outdoor = obs.outdoor_temperature || 20;
+  const heat = obs.heating_setpoint || 20;
+  const cool = obs.cooling_setpoint || 26;
+  const power = obs.HVAC_electricity_demand_rate || 0;
+  const occ = obs.people_occupant || 0;
+
+  const isWinter = i < simData?.steps * 0.25 || i > simData?.steps * 0.75;
+  const inComfort = indoor >= (isWinter ? 20 : 23) && indoor <= (isWinter ? 23.5 : 26);
+
+  // Draw building outline
+  const bx = 120, by = 60, bw = 420, bh = 220;
+
+  // Sky gradient based on outdoor temp
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, by + bh);
+  if (outdoor > 35) {
+    skyGrad.addColorStop(0, 'rgba(251,146,60,0.08)');
+    skyGrad.addColorStop(1, 'rgba(251,146,60,0.02)');
+  } else if (outdoor < 10) {
+    skyGrad.addColorStop(0, 'rgba(56,189,248,0.08)');
+    skyGrad.addColorStop(1, 'rgba(56,189,248,0.02)');
+  } else {
+    skyGrad.addColorStop(0, 'rgba(0,229,160,0.04)');
+    skyGrad.addColorStop(1, 'transparent');
+  }
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(bx, 0, bw, by + bh);
+
+  // Building shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.rect(bx + 8, by + 8, bw, bh);
+  ctx.fill();
+
+  // Building body
+  const buildingColor = inComfort ? 'rgba(0,229,160,0.06)' : 'rgba(248,113,113,0.08)';
+  ctx.fillStyle = buildingColor;
+  ctx.strokeStyle = inComfort ? 'rgba(0,229,160,0.3)' : 'rgba(248,113,113,0.4)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.rect(bx, by, bw, bh);
+  ctx.fill();
+  ctx.stroke();
+
+  // Roof
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(bx, by, bw, 12);
+
+  // Draw 5 zones
+  const zoneW = bw / 5;
+  for (let z = 0; z < 5; z++) {
+    const zx = bx + z * zoneW;
+    const zoneTemp = indoor + (Math.random() * 0.5 - 0.25); // slight variation
+    const zoneInComfort = zoneTemp >= (isWinter ? 20 : 23) && zoneTemp <= (isWinter ? 23.5 : 26);
+    const col = zoneInComfort ? `rgba(0,229,160,0.12)` : `rgba(248,113,113,0.18)`;
+    ctx.fillStyle = col;
+    ctx.fillRect(zx + 4, by + 16, zoneW - 8, bh - 20);
+
+    // Zone label
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '9px Space Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Z${z+1}`, zx + zoneW/2, by + 32);
+
+    // Zone temp
+    ctx.fillStyle = zoneInComfort ? '#00e5a0' : '#f87171';
+    ctx.font = 'bold 10px Space Mono, monospace';
+    ctx.fillText(zoneTemp.toFixed(1)+'°', zx + zoneW/2, by + 46);
+
+    // Windows
+    for (let row = 0; row < 3; row++) {
+      for (let col2 = 0; col2 < 2; col2++) {
+        const wx = zx + 12 + col2 * 20;
+        const wy = by + 60 + row * 44;
+        const occupied = occ > 0 && Math.random() > 0.4;
+        ctx.fillStyle = occupied ? 'rgba(251,191,36,0.4)' : 'rgba(56,189,248,0.12)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.rect(wx, wy, 14, 20);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Zone dividers
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let z = 1; z < 5; z++) {
+    ctx.beginPath();
+    ctx.moveTo(bx + z * zoneW, by + 12);
+    ctx.lineTo(bx + z * zoneW, by + bh);
+    ctx.stroke();
+  }
+
+  // HVAC unit on roof
+  const hvacW = 80, hvacH = 30;
+  const hvacX = bx + bw/2 - hvacW/2, hvacY = by - hvacH - 4;
+  ctx.fillStyle = 'rgba(56,189,248,0.15)';
+  ctx.strokeStyle = 'rgba(56,189,248,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(hvacX, hvacY, hvacW, hvacH);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '9px Space Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('HVAC', hvacX + hvacW/2, hvacY + 12);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillText(Math.round(power/1000).toFixed(1)+'kW', hvacX + hvacW/2, hvacY + 24);
+
+  // Power flow lines
+  if (power > 10000) {
+    ctx.strokeStyle = `rgba(56,189,248,${Math.min(0.8, power/200000)})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(hvacX + hvacW/2, hvacY + hvacH);
+    ctx.lineTo(hvacX + hvacW/2, by + 12);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Outdoor temperature indicator (left)
+  drawTempBar(ctx, 40, by + 20, 30, bh - 20, outdoor, -5, 50, '#fb923c', 'Outdoor');
+
+  // Indoor temperature indicator (right)
+  drawTempBar(ctx, bx + bw + 20, by + 20, 30, bh - 20, indoor, 10, 45, '#38bdf8', 'Indoor');
+
+  // Comfort zone marker on indoor bar
+  const indoorBarH = bh - 20;
+  const comfortMinPct = 1 - (((isWinter ? 20 : 23) - 10) / 35);
+  const comfortMaxPct = 1 - (((isWinter ? 23.5 : 26) - 10) / 35);
+  const comfortY1 = (by + 20) + comfortMaxPct * indoorBarH;
+  const comfortY2 = (by + 20) + comfortMinPct * indoorBarH;
+  ctx.fillStyle = 'rgba(0,229,160,0.2)';
+  ctx.fillRect(bx + bw + 20, comfortY1, 30, comfortY2 - comfortY1);
+  ctx.strokeStyle = 'rgba(0,229,160,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(bx + bw + 18, comfortY1); ctx.lineTo(bx + bw + 52, comfortY1);
+  ctx.moveTo(bx + bw + 18, comfortY2); ctx.lineTo(bx + bw + 52, comfortY2);
+  ctx.stroke();
+
+  // Setpoint lines on indoor bar
+  const heatPct = 1 - ((heat - 10) / 35);
+  const coolPct = 1 - ((cool - 10) / 35);
+  const heatY = (by + 20) + heatPct * indoorBarH;
+  const coolY = (by + 20) + coolPct * indoorBarH;
+
+  ctx.strokeStyle = '#f87171'; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(bx + bw + 18, heatY); ctx.lineTo(bx + bw + 52, heatY); ctx.stroke();
+  ctx.strokeStyle = '#00e5a0';
+  ctx.beginPath(); ctx.moveTo(bx + bw + 18, coolY); ctx.lineTo(bx + bw + 52, coolY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Status badge
+  ctx.fillStyle = inComfort ? 'rgba(0,229,160,0.15)' : 'rgba(248,113,113,0.15)';
+  ctx.strokeStyle = inComfort ? 'rgba(0,229,160,0.5)' : 'rgba(248,113,113,0.5)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, bx, by + bh + 8, bw, 22, 4);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = inComfort ? '#00e5a0' : '#f87171';
+  ctx.font = 'bold 10px Space Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(inComfort ? '✓ COMFORT ZONE — agent performing well' : '✗ COMFORT VIOLATION — temperature outside range', bx + bw/2, by + bh + 22);
+
+  // Step counter
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = '10px Space Mono, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(`step ${step.toLocaleString()}`, W - 10, H - 8);
+}
+
+function drawTempBar(ctx, x, y, w, h, temp, min, max, color, label) {
+  // Background
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.fill(); ctx.stroke();
+
+  // Fill
+  const pct = Math.max(0, Math.min(1, (temp - min) / (max - min)));
+  const fillH = pct * h;
+  const grad = ctx.createLinearGradient(0, y + h, 0, y);
+  grad.addColorStop(0, 'rgba(56,189,248,0.5)');
+  grad.addColorStop(0.5, color + '99');
+  grad.addColorStop(1, color);
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y + h - fillH, w, fillH);
+
+  // Label
+  ctx.fillStyle = color;
+  ctx.font = 'bold 9px Space Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, x + w/2, y - 6);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = 'bold 10px Space Mono, monospace';
+  ctx.fillText(temp.toFixed(1)+'°', x + w/2, y + h + 14);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// ── Main refresh ──────────────────────────────────
+async function refreshAll() {
+  clearTerm();
+  setP(5);
+  setStatus(false, 'connecting...');
+  log('[system] Connecting to server at http://localhost:5000 ...', 'tinfo');
+
+  try {
+    await fetch(API + '/debug');
+    setStatus(true, 'server online');
+    log('[system] Server connected ✓', 'tok');
+  } catch(e) {
+    setStatus(false, 'server offline');
+    log('[system] Cannot reach server. Run:', 'terr');
+    log('[system]   cd /workspaces/sinergym/scripts', 'tdim');
+    log('[system]   python server.py', 'tdim');
+    setP(0); return;
+  }
+
+  await loadModelInfo();
+  await loadTraining();
+  await loadEvalCheckpoints();
+  await loadEvalYear();
+  await loadTrainingDeepDive();
+  await loadSimData();
+  setP(100);
+
+  const now = new Date().toLocaleTimeString();
+  document.getElementById('last-refresh').textContent = now;
+  document.getElementById('refresh-time').textContent = 'last refresh: ' + now;
+  log('[system] All data loaded. ' + now, 'tok');
+}
+
+// ── Init ──────────────────────────────────────────
+drawSimCanvas(0);
+refreshAll();
+</script>
+</body>
+</html>

@@ -32,4 +32,8 @@
     "editor.minimap.renderCharacters": true,
     "editor.minimap.side": "right",
 
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "tensorboard.logDirectory": "${workspaceFolder}/outputs/tb"
+
 }

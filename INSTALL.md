@@ -2,11 +2,11 @@ For detailed information, please refer to the [documentation](https://ugr-sail.g
 
 # Installation
 
-*Sinergym* relies on several dependencies, the specifics of which vary by version.
+*HVAC-RL* relies on several dependencies, the specifics of which vary by version.
 
-The table below provides a summary of the dependencies versions supported by *Sinergym* across its releases:
+The table below provides a summary of the dependencies versions supported by *HVAC-RL* across its releases:
 
-| **Sinergym version** | **Ubuntu version** | **Python version** | **EnergyPlus version** | **Building model file** |
+| **HVAC-RL version** | **Ubuntu version** | **Python version** | **EnergyPlus version** | **Building model file** |
 | -------------------- | ------------------ | ------------------ | ---------------------- | ----------------------- |
 | **0.0**              | 18.04 LTS          | 3.6                | 8.3.0                  | IDF                     |
 | **1.1.0**            | 18.04 LTS          | 3.6                | **9.5.0**              | IDF                     |
@@ -19,15 +19,15 @@ The table below provides a summary of the dependencies versions supported by *Si
 | **3.11.0**           | 24.04 LTS          | 3.12.3             | **25.1.0**             | epJSON                  |
 
 
-We recommend to always use the latest version of *Sinergym* that is supported by the container. This will help you to avoid the complexities of manual installation.
-However, if you prefer to manually install *Sinergym* on your computer, we provide the necessary documentation in the subsequent sections.
+We recommend to always use the latest version of *HVAC-RL* that is supported by the container. This will help you to avoid the complexities of manual installation.
+However, if you prefer to manually install *HVAC-RL* on your computer, we provide the necessary documentation in the subsequent sections.
 
 ## Docker container
 
-We provide a **Dockerfile** to install all dependencies and prepare the image for running *Sinergym*. This is the **recommended** option, since it
+We provide a **Dockerfile** to install all dependencies and prepare the image for running *HVAC-RL*. This is the **recommended** option, since it
 ensures that all dependencies and versions are correctly installed and configured.
 
-This Dockerfile installs the compatible operating system, EnergyPlus, Python, and *Sinergym*, along with the necessary dependencies for its proper functioning. 
+This Dockerfile installs the compatible operating system, EnergyPlus, Python, and *HVAC-RL*, along with the necessary dependencies for its proper functioning. 
 
 If you have cloned the repository, run the following command:
 
@@ -35,7 +35,7 @@ If you have cloned the repository, run the following command:
 $ docker build -t <tag_name> .
 ```
 
-*Sinergym* has a set of optional dependencies that enhance its usage. These dependencies can be installed in the following way when building the image:
+*HVAC-RL* has a set of optional dependencies that enhance its usage. These dependencies can be installed in the following way when building the image:
 
 ```bash
 $ docker build -t <tag_name> --build-arg SINERGYM_EXTRAS="drl notebooks gcloud" .
@@ -70,7 +70,7 @@ It is also possible to keep an open session in the image. For more information, 
 $ docker run -it <tag_name> /bin/bash
 ```
 
-> :memo: **Note:** For [Visual Studio Code](https://code.visualstudio.com/) users, simply open the root directory and click the *Reopen in container* pop-up button. This will automatically install all dependencies and enable you to run *Sinergym* in an isolated environment. For more details about this feature, refer to the [VSCode Containers extension documentation](https://code.visualstudio.com/docs/remote/containers).
+> :memo: **Note:** For [Visual Studio Code](https://code.visualstudio.com/) users, simply open the root directory and click the *Reopen in container* pop-up button. This will automatically install all dependencies and enable you to run *HVAC-RL* in an isolated environment. For more details about this feature, refer to the [VSCode Containers extension documentation](https://code.visualstudio.com/docs/remote/containers).
 
 ## Manual installation
 
@@ -80,7 +80,7 @@ First, ensure that your system meets the previously specified software compatibi
 
 ### Configure Python Environment
 
-Start by installing the desired version of Python and *pip*. It is recommended to set up a working environment for Python. Finally, install the necessary dependencies of *Sinergym* in that environment:
+Start by installing the desired version of Python and *pip*. It is recommended to set up a working environment for Python. Finally, install the necessary dependencies of *HVAC-RL* in that environment:
 
 ```sh
 $ pip install sinergym
@@ -92,7 +92,7 @@ You can also install the optional packages by running:
 $ pip install sinergym[extras]
 ```
 
-To directly install *Sinergym* from the cloned repository, run:
+To directly install *HVAC-RL* from the cloned repository, run:
 
 ```sh
 $ poetry install --no-interaction --extras <optional_extras>
@@ -100,13 +100,13 @@ $ poetry install --no-interaction --extras <optional_extras>
 $ pip install .[<optional_extras>]
 ```
 
-Now the correct Python version and the necessary modules to run *Sinergym* will be installed.
+Now the correct Python version and the necessary modules to run *HVAC-RL* will be installed.
 
 Let's now proceed with the installation of external software.
 
 ### Install EnergyPlus
 
-We have tested and confirmed compatibility with **EnergyPlus** version `24.1.0`. *Sinergym* might not work with other non-tested versions.
+We have tested and confirmed compatibility with **EnergyPlus** version `24.1.0`. *HVAC-RL* might not work with other non-tested versions.
 
 Follow the instructions detailed [here](https://energyplus.net/downloads) to install it in Linux (we only guarantee proper testing and support for **Ubuntu**). 
 
@@ -114,11 +114,11 @@ After installation, the folder `Energyplus-24-1-0` should appear in the selected
 
 ### Include EnergyPlus Python API in Python path
 
-*Sinergym* relies on the *Energyplus* Python API. The modules of this API are located in the *EnergyPlus* folder that was created in the previous step. You must add this installation path to the `PYTHONPATH` environment variable so that the interpreter can access these modules.
+*HVAC-RL* relies on the *Energyplus* Python API. The modules of this API are located in the *EnergyPlus* folder that was created in the previous step. You must add this installation path to the `PYTHONPATH` environment variable so that the interpreter can access these modules.
 
-## Develop in Sinergym
+## Develop in HVAC-RL
 
-Whether you have chosen to use Docker or a manual installation, we offer facilities for developing and contributing to *Sinergym*.
+Whether you have chosen to use Docker or a manual installation, we offer facilities for developing and contributing to *HVAC-RL*.
 
 - If you have used a container, Visual Studio Code will set up a development environment with all the necessary packages automatically configured, including documentation, tests, etc.
 
@@ -148,9 +148,9 @@ $ pip install -e .[extras]
 
 ## Verify Installation
 
-This project is automatically monitored using **tests**. To verify that *Sinergym* has been installed correctly, execute `pytest tests/ -vv` from the repository root directory. Tests dependencies should have been previously installed.
+This project is automatically monitored using **tests**. To verify that *HVAC-RL* has been installed correctly, execute `pytest tests/ -vv` from the repository root directory. Tests dependencies should have been previously installed.
 
-Each time the *Sinergym* repository is updated, the tests are automatically executed in a remote container built using the Dockerfile. This task is performed via [Github actions](https://docs.github.com/es/actions/) (refer to the `Github actions` documentation section for additional details).
+Each time the *HVAC-RL* repository is updated, the tests are automatically executed in a remote container built using the Dockerfile. This task is performed via [Github actions](https://docs.github.com/es/actions/) (refer to the `Github actions` documentation section for additional details).
 
 ## Cloud Computing
 
